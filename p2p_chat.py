@@ -4,7 +4,7 @@ from datetime import datetime
 
 # Константы
 UDP_PORT, TCP_PORT = 45678, 5000
-MSG_TEXT, MSG_NAME, MSG_DISC, MSG_HIST_REQ, MSG_HIST_DATA = 1, 2, 4, 5, 6
+MSG_TEXT, MSG_NAME, MSG_DISC = 1, 2, 4
 
 history = []
 peers = {}  # {ip: {"sock": s, "name": n}}
@@ -60,14 +60,6 @@ def handle_peer(sock, ip):
             if t is None: break
             if t == MSG_TEXT:
                 log(f"{name} ({ip}): {d.decode()}")
-            elif t == MSG_HIST_REQ:
-                with lock_hist:
-                    send_msg(sock, MSG_HIST_DATA, json.dumps(history).encode())
-            elif t == MSG_HIST_DATA:
-                evs = json.loads(d.decode())
-                log("--- История ---")
-                for e in evs: print(f"[{e['time']}] {e['text']}")
-                log("--- Конец истории ---")
             elif t == MSG_DISC:
                 break
     except: pass
@@ -105,7 +97,7 @@ def udp_listener():
             info = json.loads(data)
             with lock_peers:
                 if ip in peers: continue
-            # Подключаемся к тому, кто прислал广播
+            # Подключаемся к тому, кто прислал широковещательный пакет
             threading.Thread(target=connect_to_peer, args=(ip, info['tcp_port'], info['name']), daemon=True).start()
         except: continue
 
@@ -128,9 +120,6 @@ def connect_to_peer(ip, port, name_hint):
         
         # Сначала шлем свое имя
         send_msg(sock, MSG_NAME, my_name.encode())
-        
-        # Запрашиваем историю (мы - новый узел)
-        send_msg(sock, MSG_HIST_REQ)
         
         # Передаем управление в обработчик (он ждет имя в ответ и дальше работает)
         handle_peer(sock, ip)
