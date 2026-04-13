@@ -2,31 +2,26 @@
 import socket, struct, threading, sys, argparse, json, time
 from datetime import datetime
 
-# --- Константы ---
 UDP_PORT, TCP_PORT = 45678, 5000
 MSG_TEXT, MSG_NAME, MSG_DISC = 1, 2, 4
 
-# --- Глобальное состояние ---
-history = []          # История событий
-peers = {}            # {ip: {"sock": s, "name": n}}
-locks = [threading.Lock() for _ in range(3)] # [hist, peers, io]
+history = []          
+peers = {}            
+locks = [threading.Lock() for _ in range(3)] 
 stop_flag = False
 my_ip, my_name = "", ""
 
 def log(msg):
-    """Запись в историю и вывод в консоль"""
     ts = datetime.now().strftime("%H:%M:%S")
     with locks[0]: history.append({"time": ts, "text": msg})
     with locks[2]: print(f"\n[{ts}] {msg}\n> ", end="", flush=True)
 
 def send_msg(sock, m_type, data=b""):
-    """Отправка пакета: [Тип(1)][Длина(4)][Данные]"""
     try: sock.sendall(struct.pack("!BI", m_type, len(data)) + data)
     except: return False
     return True
 
 def recv_msg(sock):
-    """Прием полного пакета"""
     h = b""
     while len(h) < 5:
         chunk = sock.recv(5 - len(h))
@@ -41,11 +36,8 @@ def recv_msg(sock):
     return t, d
 
 def handle_stream(sock, ip, is_incoming):
-    """Универсальный обработчик потока (и входящий, и исходящий)"""
     name = "Unknown"
     try:
-        # Рукопожатие: кто первый подключился (incoming) - тот ждет имя первым.
-        # Кто подключался сам (outgoing) - тот шлет имя первым.
         if is_incoming:
             t, d = recv_msg(sock)
             if t != MSG_NAME: return
@@ -57,13 +49,11 @@ def handle_stream(sock, ip, is_incoming):
             if t != MSG_NAME: return
             name = d.decode()
 
-        # Регистрация
         with locks[1]:
-            if ip in peers: return # Уже есть
+            if ip in peers: return 
             peers[ip] = {"sock": sock, "name": name}
         log(f"*** {name} ({ip}) подключился ***")
 
-        # Цикл чтения
         while not stop_flag:
             t, d = recv_msg(sock)
             if t is None: break
@@ -79,7 +69,6 @@ def handle_stream(sock, ip, is_incoming):
         except: pass
 
 def tcp_server():
-    """Сервер входящих TCP соединений"""
     srv = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     srv.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
     srv.bind((my_ip, TCP_PORT))
@@ -92,7 +81,6 @@ def tcp_server():
         except: continue
 
 def udp_listener():
-    """Слушаем UDP для обнаружения соседей"""
     sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
     sock.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
@@ -106,12 +94,10 @@ def udp_listener():
             info = json.loads(data)
             with locks[1]:
                 if ip in peers: continue
-            # Пытаемся подключиться
             threading.Thread(target=connect_peer, args=(ip, info['tcp_port']), daemon=True).start()
         except: continue
 
 def udp_broadcaster():
-    """Рассылаем о себе"""
     sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     sock.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
     sock.bind((my_ip, 0))
@@ -122,20 +108,18 @@ def udp_broadcaster():
         time.sleep(3)
 
 def connect_peer(ip, port):
-    """Исходящее подключение к соседу"""
     sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     sock.settimeout(5)
     try:
         sock.bind((my_ip, 0))
         sock.connect((ip, port))
         sock.settimeout(None)
-        handle_stream(sock, ip, False) # False = мы инициировали
+        handle_stream(sock, ip, False) 
     except:
         try: sock.close()
         except: pass
 
 def input_loop():
-    """Ввод пользователя"""
     while not stop_flag:
         try:
             txt = input("> ").strip()
@@ -166,7 +150,6 @@ def main():
     
     my_ip, my_name = args.ip, args.name
     
-    # Старт фоновых служб
     threading.Thread(target=tcp_server, daemon=True).start()
     threading.Thread(target=udp_listener, daemon=True).start()
     threading.Thread(target=udp_broadcaster, daemon=True).start()
@@ -174,9 +157,8 @@ def main():
     log(f"Старт: {my_name} @ {my_ip}:{TCP_PORT}")
     print("Команды: /peers, /quit")
     
-    input_loop() # Основной цикл блокирует здесь
+    input_loop() 
     
-    # Завершение
     stop_flag = True
     with locks[1]:
         for p in peers.values():
