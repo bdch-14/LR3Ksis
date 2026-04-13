@@ -92,7 +92,7 @@ def tcp_server():
         except: continue
 
 def udp_listener():
-    """Слушаем UDP广播 для обнаружения соседей"""
+    """Слушаем UDP для обнаружения соседей"""
     sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
     sock.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
